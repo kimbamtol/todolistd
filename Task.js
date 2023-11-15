@@ -8,6 +8,7 @@ const STORAGE_KEY = 'todos';
 
 export default function Task() {
   const [todos, setTodos] = useState([]);
+  const [currentBssid, setCurrentBssid] = useState(''); // 현재 선택된 BSSID
 
   // 첫 렌더링 시 저장소에서 todos 가져오기
   useEffect(() => {
@@ -39,6 +40,7 @@ export default function Task() {
     const newTodo = {
       id: Date.now(),
       text: todoText,
+      bssid: currentBssid, // 현재 선택된 BSSID 할일에 저장
       completed: false,
     };
 
@@ -60,11 +62,15 @@ export default function Task() {
     setTodos((prevTodos) => prevTodos.filter((todo) => todo.id !== id));
   };
 
+  const saveBssid = (newBssid) => {
+    setCurrentBssid(newBssid);
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Todo App</Text>
       <Header addTodo={addTodo} />
-      <Body todos={todos} checkTodo={checkTodo} deleteTodo={deleteTodo} />
+      <Body todos={todos} checkTodo={checkTodo} deleteTodo={deleteTodo} saveBssid={saveBssid} />
     </View>
   );
 }
