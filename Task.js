@@ -1,5 +1,6 @@
+// Task.js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import Header from './Header';
 import Body from './Body';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,7 +9,7 @@ const STORAGE_KEY = 'todos';
 
 export default function Task() {
   const [todos, setTodos] = useState([]);
-  const [currentBssid, setCurrentBssid] = useState(''); // 현재 선택된 BSSID
+  const [currentBssid, setCurrentBssid] = useState('');
 
   // 첫 렌더링 시 저장소에서 todos 가져오기
   useEffect(() => {
@@ -62,15 +63,37 @@ export default function Task() {
     setTodos((prevTodos) => prevTodos.filter((todo) => todo.id !== id));
   };
 
-  const saveBssid = (newBssid) => {
-    setCurrentBssid(newBssid);
+  const saveBssid = (todoId, newBssid) => {
+    setCurrentBssid((prevBssid) => {
+      const updatedTodos = todos.map((todo) =>
+        todo.id === todoId ? { ...todo, bssid: newBssid } : todo
+      );
+      setTodos(updatedTodos);
+      return newBssid;
+    });
+  };
+
+  const handlePrint = () => {
+    // 현재 추가된 아이템들의 멤버 변수들을 콘솔에 출력
+    console.log(todos);
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Todo App</Text>
       <Header addTodo={addTodo} />
-      <Body todos={todos} checkTodo={checkTodo} deleteTodo={deleteTodo} saveBssid={saveBssid} />
+      <Body
+        todos={todos}
+        checkTodo={checkTodo}
+        deleteTodo={deleteTodo}
+        saveBssid={saveBssid}
+        addTodo={addTodo}
+      />
+
+      {/* 추가된 부분: Print 버튼 */}
+      <TouchableOpacity onPress={handlePrint} style={styles.printButton}>
+        <Text style={styles.printButtonText}>Print</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -87,5 +110,19 @@ const styles = StyleSheet.create({
     fontSize: 30,
     marginLeft: 20,
     marginBottom: 20,
+  },
+
+  // 디버깅용 , 입력한 bssid가 잘 입력됐는지 확인용
+  // 버튼 클릭시 콘솔에서 생성된 아이템들에 대한 멤버변수들의 값 확인가능
+  printButton: {
+    backgroundColor: '#2196F3',
+    padding: 10,
+    borderRadius: 5,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  printButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
 });
