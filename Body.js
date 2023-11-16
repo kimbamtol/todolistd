@@ -1,4 +1,4 @@
-import React, { Component, useState } from 'react';
+import React, { Component } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,10 +7,11 @@ class Body extends Component {
   state = {
     modalVisible: false,
     newBssid: '', // 추가
+    currentTodoId: null, // 현재 선택된 할 일의 ID
   };
 
-  setModalVisible = (visible) => {
-    this.setState({ modalVisible: visible });
+  setModalVisible = (visible, currentBssid = '', currentTodoId = null) => {
+    this.setState({ modalVisible: visible, newBssid: currentBssid, currentTodoId });
   };
 
   render() {
@@ -19,7 +20,10 @@ class Body extends Component {
         {this.props.todos.map((data) => (
           <View style={styles.todo} key={data.id}>
             <View style={styles.todoText}>
-              <TouchableOpacity style={styles.todoCheckbox} onPressOut={() => this.props.checkTodo(data.id)}>
+              <TouchableOpacity
+                style={styles.todoCheckbox}
+                onPressOut={() => this.props.checkTodo(data.id)}
+              >
                 {data.completed ? (
                   <MaterialCommunityIcons size={20} name="checkbox-marked-circle-outline" />
                 ) : (
@@ -32,7 +36,7 @@ class Body extends Component {
               <TouchableOpacity onPressOut={() => this.props.deleteTodo(data.id)}>
                 <MaterialCommunityIcons style={styles.todoDelBtn} size={30} name="delete-outline" />
               </TouchableOpacity>
-              <TouchableOpacity onPressOut={() => this.setModalVisible(true)}>
+              <TouchableOpacity onPressOut={() => this.setModalVisible(true, data.bssid, data.id)}>
                 <Ionicons style={styles.todoAddBtn} size={30} name="md-wifi-outline" />
               </TouchableOpacity>
             </View>
@@ -53,12 +57,13 @@ class Body extends Component {
                 style={styles.input}
                 placeholder="BSSID"
                 onChangeText={(newBssid) => this.setState({ newBssid })}
+                value={this.state.newBssid}
               />
               <TouchableOpacity
                 style={{ ...styles.openButton, backgroundColor: '#2196F3' }}
                 onPress={() => {
                   this.setModalVisible(!this.state.modalVisible);
-                  // 여기서 newBssid를 저장하거나 다른 작업을 수행
+                  this.props.saveBssid(this.state.currentTodoId, this.state.newBssid); // 현재 선택된 할 일 항목의 BSSID 업데이트
                 }}
               >
                 <Text style={styles.textStyle}>Save BSSID</Text>
