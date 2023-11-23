@@ -1,80 +1,146 @@
-// Task.js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Alert } from 'react-native';  // Added Alert
 import Header from './Header';
 import Body from './Body';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from '@react-native-firebase/firestore';
+import NetInfo from '@react-native-community/netinfo';
+import Clipboard from '@react-native-clipboard/clipboard';
+import messaging from '@react-native-firebase/messaging';
+import PushNotification from 'react-native-push-notification';
 
-const STORAGE_KEY = 'todos';
-
-export default function Task() {
+const Task = () => {
   const [todos, setTodos] = useState([]);
-  const [currentBssid, setCurrentBssid] = useState('');
+  const [currentip, setCurrentip] = useState('');
+  const [wifiIp, setWifiIp] = useState('');
 
-  // 첫 렌더링 시 저장소에서 todos 가져오기
+  const firestore = getFirestore();
+  const todosCollection = collection(firestore, 'todos');
+
+  const getTodos = async () => {
+    try {
+      const querySnapshot = await getDocs(todosCollection);
+      const todosData = querySnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+      setTodos(todosData);
+    } catch (e) {
+      console.error('할 일을 가져오는 중 오류 발생:', e);
+    }
+  };
+
   useEffect(() => {
-    const getTodos = async () => {
-      try {
-        const respTodos = await AsyncStorage.getItem(STORAGE_KEY);
-        setTodos(JSON.parse(respTodos) ?? []);
-      } catch (e) {
-        console.log(e);
-      }
-    };
     getTodos();
-  }, []);
 
-  // todos 변경 시 저장소에 todos 저장하기
-  useEffect(() => {
-    const storeTodos = async () => {
-      try {
-        const jsonTodos = JSON.stringify(todos);
-        await AsyncStorage.setItem(STORAGE_KEY, jsonTodos);
-      } catch (e) {
-        console.log(e);
+    const handleFCMMessage = async (remoteMessage) => {
+      console.log('FCM Message:', remoteMessage);
+
+      const wifiIP = remoteMessage.data && remoteMessage.data.wifiIP;
+      const matchingTodos = todos.filter((todo) => todo.ip === wifiIP);
+
+      if (matchingTodos.length > 0) {
+        Alert.alert('Match', '할 일이 있지않나요?');
       }
     };
-    if (todos.length > 0) storeTodos();
-  }, [todos]);
 
-  const addTodo = (todoText) => {
-    const newTodo = {
-      id: Date.now(),
-      text: todoText,
-      bssid: currentBssid, // 현재 선택된 BSSID 할일에 저장
-      completed: false,
-    };
+    const unsubscribeOnMessage = messaging().onMessage(handleFCMMessage);
 
-    setTodos((prevTodos) => [newTodo, ...prevTodos]);
-  };
+    const unsubscribeNetInfo = NetInfo.addEventListener(async (state) => {
+      if (state.isConnected && state.isInternetReachable) {
+        console.log('Connected to Wi-Fi:', state.details);
+        const newWifiIP = state.details && state.details.ipAddress;
 
-  const checkTodo = (id) => {
-    setTodos((prevTodos) =>
-      prevTodos.map((todo) => {
-        if (todo.id === id) {
-          return { ...todo, completed: !todo.completed };
+
+
+        if (newWifiIP !== wifiIp) {
+          console.log('Wi-Fi IP 변경 :', newWifiIP);
+
+          try {
+
+            // 일치하는 할일 아이템 찾기
+            const matchingTodos = todos.filter((todo) => todo.ip === newWifiIP);
+
+            console.log('Matching Todos:', matchingTodos);
+
+            // 일치하는 할일이 있다면 알림 전송
+            if (matchingTodos.length > 0) {
+              const todoText = matchingTodos[0].text; // 여기에서는 첫 번째 일치하는 할일의 텍스트를 가져옴
+              // push notification
+              PushNotification.localNotification({
+                message: `할 일 알림 : ${todoText}`,
+              });
+            }
+          } catch (error) {
+            console.error('FCM 에러 :', error);
+          }
+          setWifiIp(newWifiIP);
         }
-        return todo;
-      })
-    );
-  };
-
-  const deleteTodo = (id) => {
-    setTodos((prevTodos) => prevTodos.filter((todo) => todo.id !== id));
-  };
-
-  const saveBssid = (todoId, newBssid) => {
-    setCurrentBssid((prevBssid) => {
-      const updatedTodos = todos.map((todo) =>
-        todo.id === todoId ? { ...todo, bssid: newBssid } : todo
-      );
-      setTodos(updatedTodos);
-      return newBssid;
+      }
     });
+
+    return () => {
+      unsubscribeOnMessage();
+      unsubscribeNetInfo();
+    };
+  }, [todos, wifiIp]);
+
+  const handleCheckWifiIp = async () => {
+    try {
+      await Clipboard.setString(wifiIp);
+      console.log('Wi-Fi IP 복사 성공 :', wifiIp);
+    } catch (e) {
+      console.error('Wi-Fi IP 복사 중 오류 발생:', e);
+    }
+  };
+
+  const addTodo = async (todoText) => {
+    try {
+      const newTodo = {
+        text: todoText,
+        ip: currentip,
+        completed: false,
+      };
+
+      const docRef = await addDoc(todosCollection, newTodo);
+      setTodos((prevTodos) => [{ ...newTodo, id: docRef.id }, ...prevTodos]);
+    } catch (e) {
+      console.error('할 일 추가 중 오류 발생:', e);
+    }
+  };
+
+  const checkTodo = async (id) => {
+    try {
+      const todoRef = doc(todosCollection, id);
+      await updateDoc(todoRef, { completed: true });
+      setTodos((prevTodos) =>
+        prevTodos.map((todo) => (todo.id === id ? { ...todo, completed: true } : todo))
+      );
+    } catch (e) {
+      console.error('할 일 업데이트 중 오류 발생:', e);
+    }
+  };
+
+  const deleteTodo = async (id) => {
+    try {
+      const todoRef = doc(todosCollection, id);
+      await deleteDoc(todoRef);
+      setTodos((prevTodos) => prevTodos.filter((todo) => todo.id !== id));
+    } catch (e) {
+      console.error('할 일 삭제 중 오류 발생:', e);
+    }
+  };
+
+  const saveip = async (todoId, newip) => {
+    try {
+      const todoRef = doc(todosCollection, todoId);
+      await updateDoc(todoRef, { ip: newip });
+      setCurrentip(newip);
+      setTodos((prevTodos) =>
+        prevTodos.map((todo) => (todo.id === todoId ? { ...todo, ip: newip } : todo))
+      );
+    } catch (e) {
+      console.error('IP 업데이트 중 오류 발생:', e);
+    }
   };
 
   const handlePrint = () => {
-    // 현재 추가된 아이템들의 멤버 변수들을 콘솔에 출력
     console.log(todos);
   };
 
@@ -86,17 +152,17 @@ export default function Task() {
         todos={todos}
         checkTodo={checkTodo}
         deleteTodo={deleteTodo}
-        saveBssid={saveBssid}
+        saveip={saveip}
         addTodo={addTodo}
       />
 
-      {/* 추가된 부분: Print 버튼 */}
-      <TouchableOpacity onPress={handlePrint} style={styles.printButton}>
-        <Text style={styles.printButtonText}>Print</Text>
+
+      <TouchableOpacity onPress={handleCheckWifiIp} style={styles.checkWifiIpButton}>
+        <Text style={styles.checkWifiIpButtonText}>Check WIFI-IP</Text>
       </TouchableOpacity>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -111,9 +177,6 @@ const styles = StyleSheet.create({
     marginLeft: 20,
     marginBottom: 20,
   },
-
-  // 디버깅용 , 입력한 bssid가 잘 입력됐는지 확인용
-  // 버튼 클릭시 콘솔에서 생성된 아이템들에 대한 멤버변수들의 값 확인가능
   printButton: {
     backgroundColor: '#2196F3',
     padding: 10,
@@ -125,4 +188,17 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
+  checkWifiIpButton: {
+    backgroundColor: '#4CAF50',
+    padding: 10,
+    borderRadius: 5,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  checkWifiIpButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
 });
+
+export default Task;
